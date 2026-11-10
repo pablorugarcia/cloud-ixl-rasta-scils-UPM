@@ -1,0 +1,32 @@
+
+#ifndef CLOUD_IXL_SCILS_ADAPTER_H
+#define CLOUD_IXL_SCILS_ADAPTER_H
+ 
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <cloud_ixl_types.h>
+#include <sci.h>
+#include <scils.h>
+#include <sci_ls_icd.h>
+
+
+bool cloud_ixl_build_signal_aspect_payload(SignalAspect aspect, uint8_t payload[SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE]);
+
+sci_telegram *cloud_ixl_create_signal_aspect_telegram(char *sender, char *receiver, SignalAspect aspect);
+
+typedef enum{
+    CLOUD_IXL_SCILS_BUILD_ERROR,
+    CLOUD_IXL_SCILS_SEND_ERROR,
+    SUCCESS_SCILS,
+} CloudIxlScilsSendResult;
+
+CloudIxlScilsSendResult cloud_ixl_scils_send_signal_aspect(scils_t *scils, char *receiver, SignalAspect aspect);
+
+CloudIxlScilsSendResult cloud_ixl_scils_send_luminosity(
+    scils_t *scils,
+    char *receiver,
+    unsigned char luminosity
+);
+
+#endif

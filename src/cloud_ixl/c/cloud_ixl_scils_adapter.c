@@ -1,0 +1,188 @@
+#include <stdbool.h>
+#include <stdint.h>
+#include <cloud_ixl_types.h>
+#include <cloud_ixl_scils_adapter.h>
+#include <sci_telegram_factory.h>
+#include <scils.h>
+#include <rmemory.h>
+#include <sci_ls_icd.h>
+
+#include <string.h>
+
+static bool is_valid_sci_name(const char *name)
+{
+    return name != NULL &&
+           name[0] != '\0' &&
+           strlen(name) <= SCI_NAME_LENGTH;
+}
+
+static bool is_supported_signal_aspect(SignalAspect aspect)
+{
+    switch (aspect) {
+        case VIA_LIBRE:
+        case PARADA:
+        case ANUNCIO_PARADA:
+        case ANUNCIO_PRECAUCION:
+        case REBASE:
+        case PARADA_SELECTIVA_N2:
+        case REBASE_AUTORIZADO:
+        case APAGADA:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+bool cloud_ixl_build_signal_aspect_payload(SignalAspect aspect, uint8_t payload[SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE]){
+    static const uint8_t signal_aspect_payloads[APAGADA + 1][SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE] = {
+        [VIA_LIBRE] = {
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0xFE, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        [PARADA] = {
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0xFE, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        [ANUNCIO_PARADA] = {
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0xFE, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        /*
+         * Disabled until the integration OC accepts basic aspect 0x04.
+         * [VIA_LIBRE_CONDICIONAL] = {
+         *     0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+         *     0xFE, 0xFE, 0x01, 0xFE, 0xFE, 0xFE,
+         *     0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+         * },
+         */
+        [ANUNCIO_PRECAUCION] = {
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0xFE, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        [REBASE] = {
+            0xFE, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0x01, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        [PARADA_SELECTIVA_N2] = {
+            0xFE, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0x02, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        [REBASE_AUTORIZADO] = {
+            0xFE, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x01, 0x03, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        },
+        /*
+         * Disabled until the integration OC accepts national aspect 0x04.
+         * [PARADA_SELECTIVA_N1] = {
+         *     0xFE, 0x00, 0x00, 0x00, 0x00, 0x00,
+         *     0xFE, 0xFE, 0x01, 0x04, 0xFE, 0xFE,
+         *     0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+         * },
+         */
+        [APAGADA] = {
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFE, 0xFE, 0x0F, 0xFE, 0xFE, 0xFE,
+            0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE
+        }
+    };
+
+    if(payload == NULL || !is_supported_signal_aspect(aspect)){
+        return false;
+    }
+
+    memcpy(payload, signal_aspect_payloads[aspect], SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE);
+    return true;
+}
+
+
+sci_telegram *cloud_ixl_create_signal_aspect_telegram(char *sender, char *receiver, SignalAspect aspect){
+    uint8_t payload[SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE];
+
+    if (!cloud_ixl_build_signal_aspect_payload(aspect, payload)) {
+        return NULL;
+    }
+    if (!is_valid_sci_name(sender) || !is_valid_sci_name(receiver)) {
+        return NULL;
+    }
+
+    sci_telegram * telegram = sci_create_base_telegram(
+        SCI_PROTOCOL_LS,
+        sender,
+        receiver,
+        SCI_LS_ICD_MESSAGE_TYPE_SHOW_SIGNAL_ASPECT
+    );
+    if (telegram == NULL) {
+        return NULL;
+    }
+
+    telegram->payload.used_bytes = SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE;
+
+    memcpy(telegram->payload.data, payload, SCI_LS_ICD_SIGNAL_ASPECT_PAYLOAD_SIZE);
+
+    return telegram;
+
+}
+
+CloudIxlScilsSendResult cloud_ixl_scils_send_signal_aspect(scils_t *scils, char *receiver, SignalAspect aspect){
+    
+    if (scils == NULL || receiver == NULL) {
+        return CLOUD_IXL_SCILS_BUILD_ERROR;
+    }
+
+    sci_telegram *telegram = cloud_ixl_create_signal_aspect_telegram(scils->sciName, receiver, aspect);
+
+    if (telegram == NULL) {
+        return CLOUD_IXL_SCILS_BUILD_ERROR;
+    }
+
+    sci_return_code code = scils_send_telegram(scils, telegram);
+
+    rfree(telegram);
+
+    if (code != SUCCESS) {
+        return CLOUD_IXL_SCILS_SEND_ERROR;
+    }
+    return SUCCESS_SCILS;
+
+}
+
+CloudIxlScilsSendResult cloud_ixl_scils_send_luminosity(
+    scils_t *scils,
+    char *receiver,
+    unsigned char luminosity)
+{
+    if (scils == NULL ||
+        !is_valid_sci_name(scils->sciName) ||
+        !is_valid_sci_name(receiver)) {
+        return CLOUD_IXL_SCILS_BUILD_ERROR;
+    }
+
+    sci_telegram *telegram =
+        sci_ls_icd_create_luminosity_command(
+            scils->sciName,
+            receiver,
+            luminosity
+        );
+
+    if (telegram == NULL) {
+        return CLOUD_IXL_SCILS_BUILD_ERROR;
+    }
+
+    sci_return_code code = scils_send_telegram(scils, telegram);
+
+    rfree(telegram);
+
+    if (code != SUCCESS) {
+        return CLOUD_IXL_SCILS_SEND_ERROR;
+    }
+
+    return SUCCESS_SCILS;
+}

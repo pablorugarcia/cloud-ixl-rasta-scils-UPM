@@ -1,0 +1,49 @@
+# Build / CMake
+/build*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Objetos compilados y bibliotecas
+*.o
+*.d
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+a.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs y outputs
+*.log
+/output.log
+/CUnitAutomated-*.xml
+.cache/
+
+# IDE y herramientas locales
+.vscode/
+.idea/
+/.agents/
+/.codex/
+
+# Documentación del TFM
+/docs/
+docs/
+
+# Configuraciones específicas del entorno y nuevas campañas (datos.csv se conserva)
+/config/*.private.cfg
+/results/network_degradation/runs/
+
+# OS / Windows / WSL
+*:Zone.Identifier
+.DS_Store
+Thumbs.db

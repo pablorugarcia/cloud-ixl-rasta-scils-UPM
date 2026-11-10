@@ -1,0 +1,143 @@
+cmake_minimum_required(VERSION 3.6.2)
+project(rasta C)
+
+set(CMAKE_C_STANDARD 11)
+
+SET(USE_OPENSSL false CACHE BOOL "Use OpenSSL MD4 implementation")
+
+# Only used by the optional `cmake --install` packaging rule below. It does not participate in the Cloud IXL -> OC runtime path.
+include(GNUInstallDirs)
+
+include_directories(
+        src/rasta/headers
+        src/sci/headers)
+
+set(EXECUTABLE_OUTPUT_PATH bin/exe/examples)
+set(LIBRARY_OUTPUT_PATH bin/lib)
+
+# Shared object for RaSTA and SCI protocols
+add_library(rasta SHARED
+        # RaSTA headers
+        src/rasta/headers/config.h
+        src/rasta/headers/dictionary.h
+        src/rasta/headers/fifo.h
+        src/rasta/headers/logging.h
+        src/rasta/headers/rasta_new.h
+        src/rasta/headers/rasta_red_multiplexer.h
+        src/rasta/headers/rastacrc.h
+        src/rasta/headers/rastadeferqueue.h
+        src/rasta/headers/rastafactory.h
+        src/rasta/headers/rastahandle.h
+        src/rasta/headers/rastalist.h
+        src/rasta/headers/rastamd4.h
+        src/rasta/headers/rastamodule.h
+        src/rasta/headers/rastaredundancy_new.h
+        src/rasta/headers/rastautil.h
+        src/rasta/headers/rmemory.h
+        src/rasta/headers/udp.h
+        src/rasta/headers/rastablake2.h
+        src/rasta/headers/rastasiphash24.h
+        src/rasta/headers/rastahashing.h
+        # SCI headers
+        src/sci/headers/hashmap.h
+        src/sci/headers/sci.h
+        src/sci/headers/sci_telegram_factory.h
+        src/sci/headers/scils.h
+        # RaSTA sources
+        src/rasta/c/config.c
+        src/rasta/c/dictionary.c
+        src/rasta/c/fifo.c
+        src/rasta/c/logging.c
+        src/rasta/c/rasta_new.c
+        src/rasta/c/rasta_red_multiplexer.c
+        src/rasta/c/rastacrc.c
+        src/rasta/c/rastadeferqueue.c
+        src/rasta/c/rastafactory.c
+        src/rasta/c/rastahandle.c
+        src/rasta/c/rastalist.c
+        src/rasta/c/rastamd4.c
+        src/rasta/c/rastamodule.c
+        src/rasta/c/rastaredundancy_new.c
+        src/rasta/c/rastautil.c
+        src/rasta/c/rmemory.c
+        src/rasta/c/udp.c
+        src/sci/c/hashmap.c
+        src/rasta/c/rastablake2.c
+        src/rasta/c/rastasiphash24.c
+        src/rasta/c/rastahashing.c
+        # SCI sources
+        src/sci/c/sci.c
+        src/sci/c/sci_telegram_factory.c
+        src/sci/c/scils.c
+        )
+
+# Link system libraries for librasta
+target_link_libraries(rasta rt pthread)
+
+# if USE_OPENSSL parameter is passed to cmake or if architecture is ARM -> use openssl md4 implementation
+if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm" OR ${USE_OPENSSL})
+    message("Using OpenSSL MD4 implementation (only standard IV)")
+
+    # define flag to use openssl in rastamd4
+    target_compile_definitions(rasta PUBLIC USE_OPENSSL)
+    # link libcrypto
+    target_link_libraries(rasta crypto)
+else()
+    message("Using rasta-c MD4 implementation")
+endif()
+
+# OPTIONAL: packaging/install rule for librasta. It is not executed by a normal configure or build and is not required to run cloud_ixl.
+install(TARGETS rasta
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Enable optimization for RaSTA
+target_compile_options(rasta PRIVATE -O3 -Wall -Wextra -Wpedantic -Werror)
+
+# ----- Cloud IXL part for Masters' Thesis -----
+add_library(sci_ls_icd STATIC
+        src/sci_ls_icd/c/sci_ls_icd.c
+)
+
+target_include_directories(sci_ls_icd PUBLIC
+        src/sci_ls_icd/headers
+)
+
+target_link_libraries(sci_ls_icd PUBLIC rasta)
+
+target_compile_options(sci_ls_icd PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+)
+
+add_executable(cloud_ixl
+        src/cloud_ixl/c/main.c
+        src/cloud_ixl/c/cloud_ixl_format.c
+        src/cloud_ixl/c/cloud_ixl_input.c
+        src/cloud_ixl/c/cloud_ixl_logic.c
+        src/cloud_ixl/c/cloud_ixl_output.c
+        src/cloud_ixl/c/cloud_ixl_routes.c
+        src/cloud_ixl/c/cloud_ixl_scils_adapter.c
+        src/cloud_ixl/c/cloud_ixl_state.c
+)
+
+target_include_directories(cloud_ixl PRIVATE
+        src/cloud_ixl/headers
+)
+
+target_link_libraries(cloud_ixl rasta sci_ls_icd)
+
+target_compile_options(cloud_ixl PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+)
+
+# Preserve the config/ path so the local default also works from the build directory.
+configure_file(config/rasta_client1_local.cfg config/rasta_client1_local.cfg COPYONLY)
+configure_file(config/rasta_client1_lab.cfg config/rasta_client1_lab.cfg COPYONLY)
+
+# ----- End of Master Thesis Part -----
